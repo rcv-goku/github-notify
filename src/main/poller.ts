@@ -9,10 +9,13 @@ import { getSettings, getToken, getSeenPRs, saveSeenPRs, pruneSeenPRs } from './
 import { notifyNewPRs } from './notifications';
 import { setTrayState, setTrayTooltip, getIsPaused } from './tray';
 import { log } from './logger';
+import { isNotificationSuppressed } from './quiet-hours';
 import { TrayState, GitHubPR, SeenEntry, getPRKey, isOctokitError } from '../shared/types';
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let isPolling = false;
+let pollCount = 0;
+const PRUNE_EVERY_N_POLLS = 12;
 
 function filterByAllowlist(prs: GitHubPR[], filters: string[]): GitHubPR[] {
   if (filters.length === 0) return prs;
@@ -88,16 +91,25 @@ export async function pollNow(): Promise<void> {
 
     log(`Found ${filteredPRs.length} total PRs, ${newPRs.length} new`);
 
-    if (newPRs.length > 0) {
-      await notifyNewPRs(newPRs, settings.notificationMode, settings.notificationSound, settings.customSoundPath);
+    if (newPRs.length > 0 && !isNotificationSuppressed()) {
+      notifyNewPRs(newPRs, settings.notificationMode, settings.notificationSound, settings.customSoundPath);
+    } else if (newPRs.length > 0) {
+      log(`${newPRs.length} new PRs suppressed (quiet hours/snooze active)`);
     }
 
     const updatedSeen = updateSeenSet(filteredPRs, seenEntries);
     saveSeenPRs(updatedSeen);
 
-    setTrayState(TrayState.Normal);
+    pollCount++;
+    if (pollCount % PRUNE_EVERY_N_POLLS === 0) {
+      pruneSeenPRs();
+    }
+
+    const suppressed = isNotificationSuppressed();
+    setTrayState(suppressed ? TrayState.Quiet : TrayState.Normal);
     const now = new Date().toLocaleTimeString();
-    setTrayTooltip(`GitHub Notify - ${filteredPRs.length} PRs tracked\nLast check: ${now}`);
+    const statusPrefix = suppressed ? 'Quiet - ' : '';
+    setTrayTooltip(`GitHub Notify - ${statusPrefix}${filteredPRs.length} PRs tracked\nLast check: ${now}`);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     log(`Poll error: ${message}`);
@@ -122,8 +134,8 @@ export function startPolling(): void {
   const intervalMs = settings.pollInterval * 1000;
 
   log(`Starting polling every ${settings.pollInterval}s`);
-  pollNow();
-  pollTimer = setInterval(() => pollNow(), intervalMs);
+  void pollNow();
+  pollTimer = setInterval(() => void pollNow(), intervalMs);
 }
 
 export function stopPolling(): void {

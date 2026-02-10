@@ -8,9 +8,14 @@ export enum TrayState {
   Normal = 'normal',
   Error = 'error',
   Unconfigured = 'unconfigured',
+  Quiet = 'quiet',
 }
 
-export type NotificationSound = 'none' | 'default' | 'custom';
+export enum NotificationSound {
+  None = 'none',
+  Default = 'default',
+  Custom = 'custom',
+}
 
 export interface AppSettings {
   pollInterval: number;
@@ -19,6 +24,9 @@ export interface AppSettings {
   customSoundPath: string;
   autoStart: boolean;
   filters: string[];
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
 }
 
 export interface GitHubPR {
@@ -39,7 +47,7 @@ export interface ElectronAPI {
   saveSettings: (settings: AppSettings) => Promise<void>;
   saveToken: (token: string) => Promise<void>;
   hasToken: () => Promise<boolean>;
-  testConnection: (token?: string) => Promise<{ success: boolean; username?: string; message: string }>;
+  testConnection: (token: string) => Promise<{ success: boolean; username?: string; message: string }>;
   openSoundFileDialog: () => Promise<string | null>;
 }
 
@@ -48,12 +56,9 @@ export function getPRKey(pr: GitHubPR): string {
 }
 
 export function isOctokitError(error: unknown): error is { status: number; message: string } {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    typeof (error as Record<string, unknown>).status === 'number'
-  );
+  if (typeof error !== 'object' || error === null) return false;
+  const obj = error as Record<string, unknown>;
+  return typeof obj.status === 'number' && typeof obj.message === 'string';
 }
 
 declare global {

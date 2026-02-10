@@ -1,0 +1,142 @@
+import {
+  initOctokit,
+  getAuthenticatedUser,
+  fetchAssignedPRs,
+  fetchReviewRequestedPRs,
+  deduplicatePRs,
+} from './github-api';
+import { getSettings, getToken, getSeenPRs, saveSeenPRs, pruneSeenPRs } from './store';
+import { notifyNewPRs } from './notifications';
+import { setTrayState, setTrayTooltip, getIsPaused } from './tray';
+import { log } from './logger';
+import { TrayState, GitHubPR, SeenEntry } from '../shared/types';
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let isPolling = false;
+
+function filterByAllowlist(prs: GitHubPR[], filters: string[]): GitHubPR[] {
+  if (filters.length === 0) return prs;
+
+  const normalizedFilters = filters.map((f) => f.trim().toLowerCase()).filter(Boolean);
+  if (normalizedFilters.length === 0) return prs;
+
+  return prs.filter((pr) => {
+    const repo = pr.repoFullName.toLowerCase();
+    return normalizedFilters.some((filter) => {
+      if (filter.includes('/')) {
+        return repo === filter;
+      }
+      return repo.startsWith(filter + '/');
+    });
+  });
+}
+
+function findNewPRs(allPRs: GitHubPR[], seenEntries: SeenEntry[]): GitHubPR[] {
+  const seenKeys = new Set(seenEntries.map((e) => e.key));
+  return allPRs.filter((pr) => {
+    const key = `${pr.repoFullName}#${pr.number}`;
+    return !seenKeys.has(key);
+  });
+}
+
+function updateSeenSet(allPRs: GitHubPR[], existingSeen: SeenEntry[]): SeenEntry[] {
+  const seenMap = new Map(existingSeen.map((e) => [e.key, e]));
+  const now = Date.now();
+
+  for (const pr of allPRs) {
+    const key = `${pr.repoFullName}#${pr.number}`;
+    if (!seenMap.has(key)) {
+      seenMap.set(key, { key, seenAt: now });
+    }
+  }
+
+  return Array.from(seenMap.values());
+}
+
+export async function pollNow(): Promise<void> {
+  if (isPolling || getIsPaused()) return;
+
+  isPolling = true;
+
+  try {
+    const token = getToken();
+    if (!token) {
+      setTrayState(TrayState.Unconfigured);
+      setTrayTooltip('GitHub Notify - No token configured');
+      return;
+    }
+
+    initOctokit(token);
+    const username = await getAuthenticatedUser();
+    const settings = getSettings();
+
+    log(`Polling for PRs assigned to ${username}`);
+
+    const [assignedResult, reviewResult] = await Promise.all([
+      fetchAssignedPRs(username),
+      fetchReviewRequestedPRs(username),
+    ]);
+
+    if (!assignedResult.changed && !reviewResult.changed) {
+      log('No changes detected (304 responses)');
+      setTrayState(TrayState.Normal);
+      return;
+    }
+
+    const allPRs = deduplicatePRs(assignedResult.prs, reviewResult.prs);
+    const filteredPRs = filterByAllowlist(allPRs, settings.filters);
+
+    const seenEntries = getSeenPRs();
+    const newPRs = findNewPRs(filteredPRs, seenEntries);
+
+    log(`Found ${filteredPRs.length} total PRs, ${newPRs.length} new`);
+
+    if (newPRs.length > 0) {
+      await notifyNewPRs(newPRs, settings.notificationMode);
+    }
+
+    const updatedSeen = updateSeenSet(filteredPRs, seenEntries);
+    saveSeenPRs(updatedSeen);
+
+    setTrayState(TrayState.Normal);
+    const now = new Date().toLocaleTimeString();
+    setTrayTooltip(`GitHub Notify - ${filteredPRs.length} PRs tracked\nLast check: ${now}`);
+  } catch (error: unknown) {
+    const err = error as { status?: number; message?: string };
+    log(`Poll error: ${err.message || 'Unknown error'}`);
+
+    if (err.status === 401) {
+      setTrayState(TrayState.Error);
+      setTrayTooltip('GitHub Notify - Token invalid');
+      stopPolling();
+    } else {
+      setTrayState(TrayState.Error);
+      setTrayTooltip(`GitHub Notify - Error: ${err.message || 'Unknown'}`);
+    }
+  } finally {
+    isPolling = false;
+  }
+}
+
+export function startPolling(): void {
+  stopPolling();
+
+  const settings = getSettings();
+  const intervalMs = settings.pollInterval * 1000;
+
+  log(`Starting polling every ${settings.pollInterval}s`);
+  pollNow();
+  pollTimer = setInterval(() => pollNow(), intervalMs);
+}
+
+export function stopPolling(): void {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+export function restartPolling(): void {
+  pruneSeenPRs();
+  startPolling();
+}

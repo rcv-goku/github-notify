@@ -7,6 +7,7 @@ const api: ElectronAPI = {
   saveToken: (token: string) => ipcRenderer.invoke('token:save', token),
   hasToken: () => ipcRenderer.invoke('token:has'),
   testConnection: (token?: string) => ipcRenderer.invoke('token:test', token),
+  openSoundFileDialog: () => ipcRenderer.invoke('dialog:open-sound-file'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

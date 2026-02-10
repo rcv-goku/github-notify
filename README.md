@@ -58,6 +58,8 @@ All settings are accessible from the tray icon's **Settings** menu item.
 |---------|---------|-------|-------------|
 | Poll Interval | 300s (5 min) | 60 -- 3600s | How often to check GitHub for new PRs |
 | Notification Mode | Both | Toast / TTS / Both | How notifications are delivered |
+| Notification Sound | System Default | System Default / Custom / None | Sound to play when new PRs are detected |
+| Custom Sound | (none) | `.wav` file path | Custom sound file (only when sound is set to Custom) |
 | Auto Start | On | On / Off | Launch automatically when you log in to Windows |
 | Filters | (empty) | One entry per line | Limit which repos trigger notifications |
 
@@ -83,6 +85,18 @@ Filters are case-insensitive. Leave the filter list empty to monitor everything.
 | **Both** | Shows toasts first, then reads them aloud. |
 
 When more than 5 new PRs are detected in a single poll, the first 5 are shown individually and the rest are summarized as *"N more new pull requests need your attention"*.
+
+### Notification Sound
+
+The notification sound setting is independent of the notification mode -- it controls whether an audible alert plays when new PRs are found.
+
+| Sound Setting | Behavior |
+|---------------|----------|
+| **System Default** | Plays the Windows notification sound when toasts appear. |
+| **Custom** | Plays a user-selected `.wav` file once per notification batch. Use the **Browse** button to select a file. |
+| **None** | Silent -- no sound plays with notifications. |
+
+The sound plays once per poll cycle, not once per PR.
 
 ## Tray Icon
 

@@ -1,6 +1,7 @@
 import { Notification, shell } from 'electron';
-import { GitHubPR, NotificationMode } from '../shared/types';
+import { GitHubPR, NotificationMode, NotificationSound } from '../shared/types';
 import { speak } from './tts';
+import { playCustomSound } from './sound';
 
 const MAX_INDIVIDUAL_NOTIFICATIONS = 5;
 
@@ -13,10 +14,11 @@ function isValidGitHubUrl(url: string): boolean {
   }
 }
 
-function showToast(pr: GitHubPR): void {
+function showToast(pr: GitHubPR, silent: boolean): void {
   const notification = new Notification({
     title: `${pr.repoFullName} #${pr.number}`,
     body: `${pr.title}\nby @${pr.author}`,
+    silent,
   });
 
   notification.on('click', () => {
@@ -28,10 +30,11 @@ function showToast(pr: GitHubPR): void {
   notification.show();
 }
 
-function showSummaryToast(count: number): void {
+function showSummaryToast(count: number, silent: boolean): void {
   const notification = new Notification({
     title: 'GitHub Notify',
     body: `${count} more new pull requests need your attention`,
+    silent,
   });
 
   notification.show();
@@ -45,18 +48,27 @@ function buildTTSText(pr: GitHubPR): string {
 export async function notifyNewPRs(
   prs: GitHubPR[],
   mode: NotificationMode,
+  sound: NotificationSound,
+  customSoundPath: string,
 ): Promise<void> {
   if (prs.length === 0) return;
 
   const toNotifyIndividually = prs.slice(0, MAX_INDIVIDUAL_NOTIFICATIONS);
   const remaining = prs.length - MAX_INDIVIDUAL_NOTIFICATIONS;
 
+  // Suppress toast sound when using custom sound or no sound
+  const silentToast = sound !== 'default';
+
+  if (sound === 'custom' && customSoundPath) {
+    playCustomSound(customSoundPath);
+  }
+
   if (mode === NotificationMode.Toast || mode === NotificationMode.Both) {
     for (const pr of toNotifyIndividually) {
-      showToast(pr);
+      showToast(pr, silentToast);
     }
     if (remaining > 0) {
-      showSummaryToast(remaining);
+      showSummaryToast(remaining, silentToast);
     }
   }
 

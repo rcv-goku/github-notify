@@ -14,6 +14,8 @@ const store = new Store<StoreSchema>({
     settings: {
       pollInterval: 300,
       notificationMode: NotificationMode.Both,
+      notificationSound: 'default',
+      customSoundPath: '',
       autoStart: true,
       filters: [],
     },

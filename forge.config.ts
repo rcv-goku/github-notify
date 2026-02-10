@@ -10,6 +10,7 @@ const config: ForgeConfig = {
     asar: true,
     name: 'GitHubNotify',
     executableName: 'github-notify',
+    icon: 'assets/app-icon',
   },
   rebuildConfig: {},
   makers: [

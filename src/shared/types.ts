@@ -10,9 +10,13 @@ export enum TrayState {
   Unconfigured = 'unconfigured',
 }
 
+export type NotificationSound = 'none' | 'default' | 'custom';
+
 export interface AppSettings {
   pollInterval: number;
   notificationMode: NotificationMode;
+  notificationSound: NotificationSound;
+  customSoundPath: string;
   autoStart: boolean;
   filters: string[];
 }
@@ -36,6 +40,7 @@ export interface ElectronAPI {
   saveToken: (token: string) => Promise<void>;
   hasToken: () => Promise<boolean>;
   testConnection: (token?: string) => Promise<{ success: boolean; username?: string; message: string }>;
+  openSoundFileDialog: () => Promise<string | null>;
 }
 
 export function getPRKey(pr: GitHubPR): string {

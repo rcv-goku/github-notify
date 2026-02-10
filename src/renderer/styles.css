@@ -185,6 +185,15 @@ button:disabled {
   border-top: 1px solid #d8dee4;
 }
 
+.file-row {
+  display: flex;
+  gap: 8px;
+}
+
+.file-row input {
+  flex: 1;
+}
+
 .interval-row {
   display: flex;
   align-items: center;

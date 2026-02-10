@@ -1,5 +1,5 @@
 import './styles.css';
-import { NotificationMode } from '../shared/types';
+import { NotificationMode, NotificationSound } from '../shared/types';
 
 const app = document.getElementById('app')!;
 
@@ -35,6 +35,23 @@ app.innerHTML = `
   </div>
 
   <div class="form-group">
+    <label for="notification-sound">Notification Sound</label>
+    <select id="notification-sound">
+      <option value="default">System Default</option>
+      <option value="custom">Custom Sound</option>
+      <option value="none">None</option>
+    </select>
+  </div>
+
+  <div class="form-group" id="custom-sound-group" style="display: none;">
+    <label for="custom-sound-path">Sound File (.wav)</label>
+    <div class="file-row">
+      <input type="text" id="custom-sound-path" readonly placeholder="No file selected" />
+      <button type="button" id="browse-sound">Browse</button>
+    </div>
+  </div>
+
+  <div class="form-group">
     <div class="toggle-row">
       <label>Start with Windows</label>
       <label class="toggle">
@@ -61,6 +78,10 @@ const testConnectionBtn = document.getElementById('test-connection') as HTMLButt
 const tokenStatus = document.getElementById('token-status') as HTMLDivElement;
 const pollIntervalInput = document.getElementById('poll-interval') as HTMLInputElement;
 const notificationModeSelect = document.getElementById('notification-mode') as HTMLSelectElement;
+const notificationSoundSelect = document.getElementById('notification-sound') as HTMLSelectElement;
+const customSoundGroup = document.getElementById('custom-sound-group') as HTMLDivElement;
+const customSoundPathInput = document.getElementById('custom-sound-path') as HTMLInputElement;
+const browseSoundBtn = document.getElementById('browse-sound') as HTMLButtonElement;
 const autoStartCheckbox = document.getElementById('auto-start') as HTMLInputElement;
 const filtersTextarea = document.getElementById('filters') as HTMLTextAreaElement;
 const saveBtn = document.getElementById('save') as HTMLButtonElement;
@@ -72,6 +93,17 @@ toggleVisibilityBtn.addEventListener('click', () => {
   } else {
     tokenInput.type = 'password';
     toggleVisibilityBtn.textContent = 'Show';
+  }
+});
+
+notificationSoundSelect.addEventListener('change', () => {
+  customSoundGroup.style.display = notificationSoundSelect.value === 'custom' ? '' : 'none';
+});
+
+browseSoundBtn.addEventListener('click', async () => {
+  const filePath = await window.electronAPI.openSoundFileDialog();
+  if (filePath) {
+    customSoundPathInput.value = filePath;
   }
 });
 
@@ -112,6 +144,8 @@ saveBtn.addEventListener('click', async () => {
   await window.electronAPI.saveSettings({
     pollInterval,
     notificationMode: notificationModeSelect.value as NotificationMode,
+    notificationSound: notificationSoundSelect.value as NotificationSound,
+    customSoundPath: customSoundPathInput.value,
     autoStart: autoStartCheckbox.checked,
     filters,
   });
@@ -126,6 +160,9 @@ async function loadSettings(): Promise<void> {
   const settings = await window.electronAPI.getSettings();
   pollIntervalInput.value = String(settings.pollInterval);
   notificationModeSelect.value = settings.notificationMode;
+  notificationSoundSelect.value = settings.notificationSound;
+  customSoundPathInput.value = settings.customSoundPath;
+  customSoundGroup.style.display = settings.notificationSound === 'custom' ? '' : 'none';
   autoStartCheckbox.checked = settings.autoStart;
   filtersTextarea.value = settings.filters.join('\n');
 

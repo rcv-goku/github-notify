@@ -89,7 +89,7 @@ export async function pollNow(): Promise<void> {
     log(`Found ${filteredPRs.length} total PRs, ${newPRs.length} new`);
 
     if (newPRs.length > 0) {
-      await notifyNewPRs(newPRs, settings.notificationMode);
+      await notifyNewPRs(newPRs, settings.notificationMode, settings.notificationSound, settings.customSoundPath);
     }
 
     const updatedSeen = updateSeenSet(filteredPRs, seenEntries);

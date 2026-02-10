@@ -82,6 +82,7 @@ export function createTray(cbs: TrayCallbacks): Tray {
 }
 
 export function setTrayState(state: TrayState): void {
+  if (currentState === state) return;
   currentState = state;
   if (!tray) return;
 
@@ -101,14 +102,3 @@ export function getIsPaused(): boolean {
   return isPaused;
 }
 
-export function setIsPaused(paused: boolean): void {
-  isPaused = paused;
-  updateContextMenu();
-}
-
-export function destroyTray(): void {
-  if (tray) {
-    tray.destroy();
-    tray = null;
-  }
-}

@@ -4,6 +4,15 @@ import { speak } from './tts';
 
 const MAX_INDIVIDUAL_NOTIFICATIONS = 5;
 
+function isValidGitHubUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && parsed.hostname === 'github.com';
+  } catch {
+    return false;
+  }
+}
+
 function showToast(pr: GitHubPR): void {
   const notification = new Notification({
     title: `${pr.repoFullName} #${pr.number}`,
@@ -11,7 +20,9 @@ function showToast(pr: GitHubPR): void {
   });
 
   notification.on('click', () => {
-    shell.openExternal(pr.url);
+    if (isValidGitHubUrl(pr.url)) {
+      shell.openExternal(pr.url);
+    }
   });
 
   notification.show();

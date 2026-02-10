@@ -1,27 +1,51 @@
 import { ipcMain } from 'electron';
 import { getSettings, saveSettings, saveToken, hasToken } from './store';
 import { testConnection } from './github-api';
-import { AppSettings } from '../shared/types';
+import { AppSettings, NotificationMode } from '../shared/types';
+
+function isValidSettings(value: unknown): value is AppSettings {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.pollInterval === 'number' &&
+    obj.pollInterval >= 60 &&
+    obj.pollInterval <= 3600 &&
+    typeof obj.notificationMode === 'string' &&
+    Object.values(NotificationMode).includes(obj.notificationMode as NotificationMode) &&
+    typeof obj.autoStart === 'boolean' &&
+    Array.isArray(obj.filters) &&
+    obj.filters.every((f: unknown) => typeof f === 'string')
+  );
+}
 
 export function registerIpcHandlers(onSettingsChanged: () => void): void {
-  ipcMain.handle('settings:get', async () => {
+  ipcMain.handle('settings:get', () => {
     return getSettings();
   });
 
-  ipcMain.handle('settings:save', async (_event, settings: AppSettings) => {
+  ipcMain.handle('settings:save', (_event, settings: unknown) => {
+    if (!isValidSettings(settings)) {
+      throw new Error('Invalid settings');
+    }
     saveSettings(settings);
     onSettingsChanged();
   });
 
-  ipcMain.handle('token:save', async (_event, token: string) => {
+  ipcMain.handle('token:save', (_event, token: unknown) => {
+    if (typeof token !== 'string' || token.length === 0 || token.length > 500) {
+      throw new Error('Invalid token');
+    }
     saveToken(token);
   });
 
-  ipcMain.handle('token:has', async () => {
+  ipcMain.handle('token:has', () => {
     return hasToken();
   });
 
-  ipcMain.handle('token:test', async (_event, token: string) => {
+  ipcMain.handle('token:test', (_event, token: unknown) => {
+    if (typeof token !== 'string' || token.length === 0) {
+      return { success: false, message: 'Invalid token provided' };
+    }
     return testConnection(token);
   });
 }

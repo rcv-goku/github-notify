@@ -18,14 +18,11 @@ export interface AppSettings {
 }
 
 export interface GitHubPR {
-  id: number;
   number: number;
   title: string;
-  body: string;
   repoFullName: string;
   author: string;
   url: string;
-  createdAt: string;
 }
 
 export interface SeenEntry {
@@ -39,7 +36,19 @@ export interface ElectronAPI {
   saveToken: (token: string) => Promise<void>;
   hasToken: () => Promise<boolean>;
   testConnection: (token?: string) => Promise<{ success: boolean; username?: string; message: string }>;
-  onSettingsSaved: (callback: () => void) => void;
+}
+
+export function getPRKey(pr: GitHubPR): string {
+  return `${pr.repoFullName}#${pr.number}`;
+}
+
+export function isOctokitError(error: unknown): error is { status: number; message: string } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof (error as Record<string, unknown>).status === 'number'
+  );
 }
 
 declare global {

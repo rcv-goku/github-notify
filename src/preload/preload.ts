@@ -7,9 +7,6 @@ const api: ElectronAPI = {
   saveToken: (token: string) => ipcRenderer.invoke('token:save', token),
   hasToken: () => ipcRenderer.invoke('token:has'),
   testConnection: (token?: string) => ipcRenderer.invoke('token:test', token),
-  onSettingsSaved: (callback: () => void) => {
-    ipcRenderer.on('settings:saved', () => callback());
-  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

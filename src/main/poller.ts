@@ -9,7 +9,7 @@ import { getSettings, getToken, getSeenPRs, saveSeenPRs, pruneSeenPRs } from './
 import { notifyNewPRs } from './notifications';
 import { setTrayState, setTrayTooltip, getIsPaused } from './tray';
 import { log } from './logger';
-import { TrayState, GitHubPR, SeenEntry } from '../shared/types';
+import { TrayState, GitHubPR, SeenEntry, getPRKey, isOctokitError } from '../shared/types';
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let isPolling = false;
@@ -33,10 +33,7 @@ function filterByAllowlist(prs: GitHubPR[], filters: string[]): GitHubPR[] {
 
 function findNewPRs(allPRs: GitHubPR[], seenEntries: SeenEntry[]): GitHubPR[] {
   const seenKeys = new Set(seenEntries.map((e) => e.key));
-  return allPRs.filter((pr) => {
-    const key = `${pr.repoFullName}#${pr.number}`;
-    return !seenKeys.has(key);
-  });
+  return allPRs.filter((pr) => !seenKeys.has(getPRKey(pr)));
 }
 
 function updateSeenSet(allPRs: GitHubPR[], existingSeen: SeenEntry[]): SeenEntry[] {
@@ -44,7 +41,7 @@ function updateSeenSet(allPRs: GitHubPR[], existingSeen: SeenEntry[]): SeenEntry
   const now = Date.now();
 
   for (const pr of allPRs) {
-    const key = `${pr.repoFullName}#${pr.number}`;
+    const key = getPRKey(pr);
     if (!seenMap.has(key)) {
       seenMap.set(key, { key, seenAt: now });
     }
@@ -102,16 +99,16 @@ export async function pollNow(): Promise<void> {
     const now = new Date().toLocaleTimeString();
     setTrayTooltip(`GitHub Notify - ${filteredPRs.length} PRs tracked\nLast check: ${now}`);
   } catch (error: unknown) {
-    const err = error as { status?: number; message?: string };
-    log(`Poll error: ${err.message || 'Unknown error'}`);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    log(`Poll error: ${message}`);
 
-    if (err.status === 401) {
+    if (isOctokitError(error) && error.status === 401) {
       setTrayState(TrayState.Error);
       setTrayTooltip('GitHub Notify - Token invalid');
       stopPolling();
     } else {
       setTrayState(TrayState.Error);
-      setTrayTooltip(`GitHub Notify - Error: ${err.message || 'Unknown'}`);
+      setTrayTooltip(`GitHub Notify - Error: ${message}`);
     }
   } finally {
     isPolling = false;

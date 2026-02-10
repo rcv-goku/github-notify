@@ -8,7 +8,3 @@ export function speak(text: string): Promise<void> {
     });
   });
 }
-
-export function stopSpeaking(): void {
-  say.stop();
-}

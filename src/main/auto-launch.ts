@@ -5,7 +5,3 @@ export function setAutoLaunch(enabled: boolean): void {
     openAtLogin: enabled,
   });
 }
-
-export function getAutoLaunchEnabled(): boolean {
-  return app.getLoginItemSettings().openAtLogin;
-}

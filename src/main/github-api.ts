@@ -1,12 +1,13 @@
 import { Octokit } from '@octokit/rest';
 import { throttling } from '@octokit/plugin-throttling';
-import { GitHubPR } from '../shared/types';
+import { GitHubPR, getPRKey, isOctokitError } from '../shared/types';
 import { log } from './logger';
 
 const ThrottledOctokit = Octokit.plugin(throttling);
 
 let octokit: InstanceType<typeof ThrottledOctokit> | null = null;
 let cachedUsername: string | null = null;
+let currentToken: string | null = null;
 
 interface ETagCache {
   etag: string | null;
@@ -18,30 +19,36 @@ const etagCaches: Record<string, ETagCache> = {
   reviewRequested: { etag: null, data: [] },
 };
 
-function parseSearchResults(items: Array<Record<string, unknown>>): GitHubPR[] {
+type SearchItem = {
+  pull_request?: { html_url?: string };
+  repository_url: string;
+  user: { login: string } | null;
+  number: number;
+  title: string;
+  html_url: string;
+};
+
+function parseSearchResults(items: SearchItem[]): GitHubPR[] {
   return items
     .filter((item) => item.pull_request)
     .map((item) => {
-      const repoUrl = item.repository_url as string;
-      const repoMatch = repoUrl.match(/repos\/(.+)$/);
+      const repoMatch = item.repository_url.match(/repos\/(.+)$/);
       const repoFullName = repoMatch ? repoMatch[1] : 'unknown/unknown';
-      const user = item.user as { login: string } | null;
-      const prLinks = item.pull_request as { html_url?: string };
 
       return {
-        id: item.id as number,
-        number: item.number as number,
-        title: item.title as string,
-        body: ((item.body as string) || '').substring(0, 500),
+        number: item.number,
+        title: item.title,
         repoFullName,
-        author: user?.login || 'unknown',
-        url: prLinks.html_url || (item.html_url as string),
-        createdAt: item.created_at as string,
+        author: item.user?.login || 'unknown',
+        url: item.pull_request?.html_url || item.html_url,
       };
     });
 }
 
 export function initOctokit(token: string): void {
+  if (currentToken === token && octokit) return;
+
+  currentToken = token;
   cachedUsername = null;
   octokit = new ThrottledOctokit({
     auth: token,
@@ -94,15 +101,14 @@ async function searchPRs(
       headers,
     });
 
-    const etag = (response.headers as Record<string, string>).etag || null;
-    const items = (response.data as { items: Array<Record<string, unknown>> }).items;
+    const etag = response.headers.etag || null;
+    const items = (response.data.items as unknown as SearchItem[]);
     const prs = parseSearchResults(items);
 
     etagCaches[cacheKey] = { etag, data: prs };
     return { prs, changed: true };
   } catch (error: unknown) {
-    const err = error as { status?: number };
-    if (err.status === 304) {
+    if (isOctokitError(error) && error.status === 304) {
       return { prs: cache.data, changed: false };
     }
     throw error;
@@ -123,11 +129,11 @@ export async function testConnection(token: string): Promise<{ success: boolean;
     const { data } = await tempOctokit.rest.users.getAuthenticated();
     return { success: true, username: data.login, message: `Connected as ${data.login}` };
   } catch (error: unknown) {
-    const err = error as { status?: number; message?: string };
-    if (err.status === 401) {
+    if (isOctokitError(error) && error.status === 401) {
       return { success: false, message: 'Invalid token. Please check your PAT.' };
     }
-    return { success: false, message: err.message || 'Connection failed' };
+    const message = error instanceof Error ? error.message : 'Connection failed';
+    return { success: false, message };
   }
 }
 
@@ -135,8 +141,15 @@ export function deduplicatePRs(assigned: GitHubPR[], reviewRequested: GitHubPR[]
   const seen = new Set<string>();
   const result: GitHubPR[] = [];
 
-  for (const pr of [...assigned, ...reviewRequested]) {
-    const key = `${pr.repoFullName}#${pr.number}`;
+  for (const pr of assigned) {
+    const key = getPRKey(pr);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(pr);
+    }
+  }
+  for (const pr of reviewRequested) {
+    const key = getPRKey(pr);
     if (!seen.has(key)) {
       seen.add(key);
       result.push(pr);

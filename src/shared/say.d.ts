@@ -5,8 +5,4 @@ declare module 'say' {
     speed?: number | null,
     callback?: (err: Error | null) => void,
   ): void;
-  export function stop(): void;
-  export function getInstalledVoices(
-    callback: (err: Error | null, voices: string[]) => void,
-  ): void;
 }

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, powerMonitor, shell } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { createTray, setTrayState, setIsPaused, getIsPaused } from './tray';
+import { createTray, setTrayState, getIsPaused } from './tray';
 import { registerIpcHandlers } from './ipc-handlers';
 import { startPolling, stopPolling, restartPolling, pollNow } from './poller';
 import { hasToken, getSettings } from './store';
@@ -49,6 +49,9 @@ function openSettings(): void {
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
   }
+
+  settingsWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  settingsWindow.webContents.on('will-navigate', (event) => { event.preventDefault(); });
 
   settingsWindow.setMenuBarVisibility(false);
   settingsWindow.once('ready-to-show', () => settingsWindow?.show());
@@ -123,5 +126,10 @@ app.whenReady().then(() => {
     if (!getIsPaused() && hasToken()) {
       pollNow();
     }
+  });
+
+  app.on('before-quit', () => {
+    stopPolling();
+    log('GitHub Notify shutting down');
   });
 });

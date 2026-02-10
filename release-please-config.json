@@ -4,9 +4,8 @@
       "release-type": "node",
       "package-name": "github-notify",
       "changelog-path": "CHANGELOG.md",
-      "draft": true,
-      "tag-git-on-release": true,
       "include-v-in-tag": true,
+      "include-component-in-tag": false,
       "bump-minor-pre-major": true
     }
   }

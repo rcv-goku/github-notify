@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write    # Required for OIDC
 
 jobs:
   release-please:
@@ -39,7 +40,46 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Publish to GitHub Releases
+      - name: Build
+        run: npm run make
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign binaries
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: wellskydeveloper
+          certificate-profile-name: CodeSign
+          files-folder: out/make/squirrel.windows/x64
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify signatures
+        shell: pwsh
+        run: |
+          Get-ChildItem out/make/squirrel.windows/x64 -Filter *.exe | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            Write-Host "$($_.Name): $($sig.Status) - $($sig.SignerCertificate.Subject)"
+            if ($sig.Status -ne 'Valid') { throw "Signature verification failed: $($_.Name)" }
+          }
+
+      - name: Upload to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run publish
+        shell: pwsh
+        run: |
+          $tag = "${{ needs.release-please.outputs.tag_name }}"
+          Get-ChildItem out/make/squirrel.windows/x64 -Include *.exe,*.nupkg,RELEASES -Recurse | ForEach-Object {
+            Write-Host "Uploading: $($_.Name)"
+            gh release upload $tag $_.FullName --clobber
+          }

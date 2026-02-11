@@ -1,0 +1,91 @@
+name: Build, Sign, and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write    # Required for OIDC
+  contents: write    # Required for creating releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Your build steps here
+      - name: Build
+        run: |
+          # ... build commands ...
+          echo "Add your build commands here"
+
+      - name: Upload unsigned artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-binaries
+          path: dist/*.exe
+          retention-days: 1
+
+  sign:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Download unsigned artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned-binaries
+          path: unsigned
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign binaries
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: wellskydeveloper
+          certificate-profile-name: CodeSign
+          files-folder: unsigned
+          files-folder-filter: exe,dll,msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify signatures
+        shell: pwsh
+        run: |
+          Get-ChildItem unsigned -Recurse -Include *.exe,*.dll,*.msi | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            if ($sig.Status -ne 'Valid') { throw "Failed: $($_.Name)" }
+            Write-Host "$($_.Name): $($sig.SignerCertificate.Subject)"
+          }
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-binaries
+          path: unsigned
+
+  release:
+    needs: sign
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download signed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-binaries
+          path: signed
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: signed/**/*
+          generate_release_notes: true
